@@ -12,13 +12,33 @@ function tableHTML(rows){
 }
 
 function updatePlot(){
-  const expr = $('#expr').value;
+  const expr = $('#expr').value.trim();
+  if (!expr) throw new Error('Ingresa una función.');
+  
   const exprLatex = normalizeExprInput(expr);
   const f = makeFn(expr);
+  
   const xmin = Number($('#xmin').value), xmax = Number($('#xmax').value);
-  if (!Number.isFinite(xmin) || !Number.isFinite(xmax) || xmin === xmax) throw new Error('Rango inválido.');
+  if (!Number.isFinite(xmin) || !Number.isFinite(xmax) || xmin === xmax) {
+    throw new Error('Rango inválido. xmin y xmax deben ser números diferentes.');
+  }
+  
+  // Probar que la función sea evaluable en algunos puntos
+  try {
+    const testPoints = [xmin, (xmin + xmax) / 2, xmax];
+    testPoints.forEach(x => {
+      const y = f(x);
+      if (!Number.isFinite(y) && !Number.isNaN(y)) {
+        throw new Error(`La función no es evaluable en x=${x}`);
+      }
+    });
+  } catch (e) {
+    throw new Error(`Error evaluando la función: ${e.message}`);
+  }
+  
   setFunctionLatex(exprLatex);
   setBoundsFromFn(Math.min(xmin,xmax), Math.max(xmin,xmax), f);
+  
   const aVal = $('#a').value !== '' ? Number($('#a').value) : null;
   const bVal = $('#b').value !== '' ? Number($('#b').value) : null;
   setIntervalLines(aVal, bVal);
@@ -28,7 +48,9 @@ function updatePlot(){
 
 function getInterval(){
   let a = Number($('#a').value), b = Number($('#b').value);
-  if (!Number.isFinite(a) || !Number.isFinite(b)) throw new Error('Ingresa a y b.');
+  if (!Number.isFinite(a) || !Number.isFinite(b)) {
+    throw new Error('Ingresa valores numéricos válidos para a y b.');
+  }
   if (a === b) throw new Error('a y b no pueden ser iguales.');
   if (a > b) [a,b] = [b,a];
   setIntervalLines(a,b);
@@ -48,6 +70,13 @@ function runBoth(){
     const f = updatePlot();
     const {a,b} = getInterval();
     const errpct = Number($('#errpct').value), maxit = Number($('#maxit').value);
+    
+    if (!Number.isFinite(errpct) || errpct <= 0) {
+      throw new Error('El error objetivo debe ser un número positivo.');
+    }
+    if (!Number.isFinite(maxit) || maxit <= 0) {
+      throw new Error('Las iteraciones máximas deben ser un número entero positivo.');
+    }
 
     const bi = bisection(f, a, b, errpct, maxit);
     const fa = falsePosition(f, a, b, errpct, maxit);
@@ -56,9 +85,12 @@ function runBoth(){
     $('#tFalsa').innerHTML = tableHTML(fa.table);
     showSummary(bi, fa);
 
-    drawRootPoint(bi.root); // o usa fa.root si prefieres
-    $('#status').textContent = '';
-  }catch(err){ $('#status').innerHTML = `<span class="bad">${err.message || err}</span>`; }
+    drawRootPoint(bi.root);
+    $('#status').innerHTML = '<span style="color: green;">✓ Cálculo completado exitosamente</span>';
+  }catch(err){ 
+    $('#status').innerHTML = `<span class="bad">❌ ${err.message || err}</span>`; 
+    console.error('Error en runBoth:', err);
+  }
 }
 
 function runOne(which){
@@ -66,6 +98,13 @@ function runOne(which){
     const f = updatePlot();
     const {a,b} = getInterval();
     const errpct = Number($('#errpct').value), maxit = Number($('#maxit').value);
+    
+    if (!Number.isFinite(errpct) || errpct <= 0) {
+      throw new Error('El error objetivo debe ser un número positivo.');
+    }
+    if (!Number.isFinite(maxit) || maxit <= 0) {
+      throw new Error('Las iteraciones máximas deben ser un número entero positivo.');
+    }
 
     if(which==='bisec'){
       const bi = bisection(f, a, b, errpct, maxit);
@@ -80,21 +119,41 @@ function runOne(which){
       $('#summary').innerHTML = `<span class="pill">Falsa Posición: raíz ≈ <strong>${fmt(fa.root)}</strong>, f ≈ ${fmt(fa.fx)}, iters: ${fa.iter}, tiempo: <strong>${fa.ms.toFixed(3)} ms</strong></span>`;
       drawRootPoint(fa.root);
     }
-    $('#status').textContent = '';
-  }catch(err){ $('#status').innerHTML = `<span class="bad">${err.message || err}</span>`; }
+    $('#status').innerHTML = '<span style="color: green;">✓ Cálculo completado exitosamente</span>';
+  }catch(err){ 
+    $('#status').innerHTML = `<span class="bad">❌ ${err.message || err}</span>`; 
+    console.error('Error en runOne:', err);
+  }
 }
 
 function clearAll(){
   $('#summary').innerHTML='';
   $('#tBisec').innerHTML='';
   $('#tFalsa').innerHTML='';
+  $('#status').innerHTML='';
   clearRootPoint();
 }
 
 // Eventos
 initPlot('calculator');
-window.addEventListener('load', ()=>{ try { updatePlot(); } catch(e){} });
-$('#btnPlot').addEventListener('click', ()=>{ try{ updatePlot(); $('#status').textContent=''; }catch(err){ $('#status').innerHTML = `<span class=bad>${err.message||err}</span>`; }});
+window.addEventListener('load', ()=>{ 
+  try { 
+    updatePlot(); 
+    $('#status').innerHTML = '<span style="color: blue;">ℹ️ Gráfico inicial cargado</span>';
+  } catch(e){
+    $('#status').innerHTML = `<span class="bad">⚠️ ${e.message}</span>`;
+  } 
+});
+
+$('#btnPlot').addEventListener('click', ()=>{ 
+  try{ 
+    updatePlot(); 
+    $('#status').innerHTML = '<span style="color: green;">✓ Gráfico actualizado</span>';
+  }catch(err){ 
+    $('#status').innerHTML = `<span class="bad">❌ ${err.message||err}</span>`; 
+  }
+});
+
 $('#btnBoth').addEventListener('click', runBoth);
 $('#btnBisec').addEventListener('click', ()=>runOne('bisec'));
 $('#btnFalsa').addEventListener('click', ()=>runOne('falsa'));
@@ -103,5 +162,14 @@ $('#btnClear').addEventListener('click', clearAll);
 // Enter para re-graficar rápido
 ;['expr','xmin','xmax','a','b','errpct','maxit'].forEach(id=>{
   const el = document.getElementById(id);
-  el.addEventListener('keydown', e=>{ if(e.key==='Enter') { try{ updatePlot(); $('#status').textContent=''; }catch(err){ $('#status').innerHTML = `<span class=bad>${err.message||err}</span>`; } } });
+  el.addEventListener('keydown', e=>{ 
+    if(e.key==='Enter') { 
+      try{ 
+        updatePlot(); 
+        $('#status').innerHTML = '<span style="color: green;">✓ Gráfico actualizado</span>';
+      }catch(err){ 
+        $('#status').innerHTML = `<span class="bad">❌ ${err.message||err}</span>`; 
+      } 
+    } 
+  });
 });
